@@ -1,0 +1,34 @@
+[Unit]
+Description=MLflow - F2 Reproduction
+
+Requires=postgres.container
+After=postgres.container
+
+[Container]
+Image=mlflow-postgres.build
+ContainerName=mlflow_f2
+
+Network=postgres.network
+
+Volume=/srv/mlflow/mlflow_f2:/mlartifacts
+
+Secret=mlflow_f2_pgpass,target=/run/secrets/pgpass,mode=0600
+Environment=PGPASSFILE=/run/secrets/pgpass
+
+ExposeHostPort=5000
+PublishPort=100.89.18.91:5000:5000
+
+Exec=mlflow server \
+--backend-store-uri postgresql+psycopg2://mlflow_f2@postgres:5432/mlflow_f2 \
+--allowed-hosts localhost:5000,127.0.0.1:5000,esillileu-server:5000,esillileu-server.local:5000 \
+--cors-allowed-origins http://esillileu-server:5000,esillileu-server.local:5000 \
+--artifacts-destination /mlartifacts \
+--host 0.0.0.0 \
+--port 5000 \
+--workers 2
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
