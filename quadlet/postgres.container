@@ -1,0 +1,26 @@
+[Unit]
+Description=PostgreSQL 18
+
+[Container]
+Image=docker.io/library/postgres:18
+ContainerName=postgres
+
+Network=postgres.network
+
+Volume=postgres.volume:/var/lib/postgresql
+Volume=/opt/ml-infra/scripts/postgres:/opt/postgres:ro
+
+Secret=postgres_admin_password
+
+Environment=POSTGRES_USER=postgres
+Environment=POSTGRES_DB=postgres
+Environment=POSTGRES_PASSWORD_FILE=/run/secrets/postgres_admin_password
+Environment=POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+
+PublishPort=127.0.0.1:5432:5432
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
