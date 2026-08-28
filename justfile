@@ -1,0 +1,1 @@
+mod psql 'just/psql'

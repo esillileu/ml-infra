@@ -1,0 +1,16 @@
+\set ON_ERROR_STOP on
+
+CREATE ROLE :"name"
+    LOGIN
+    NOSUPERUSER
+    NOCREATEDB
+    NOCREATEROLE
+    NOREPLICATION;
+
+CREATE DATABASE :"name"
+    OWNER :"name";
+
+REVOKE ALL ON DATABASE :"name" FROM PUBLIC;
+GRANT CONNECT ON DATABASE :"name" TO :"name";
+
+\password :"name"
