@@ -101,9 +101,13 @@ and replaces its SSH process; like `systemctl restart`, it also starts a
 currently stopped target. `off` needs only a valid target name, so it can stop
 an existing unit even if its config was deleted or broken.
 
-Status reports `ON`, `OFF`, `RECONNECTING`, or `ERROR`. A systemctl failure is
-reported as `ERROR`, never `OFF`. Interactive SSH logins show a compact table
-containing every configured target; local interactive shells show nothing.
+Status reports `ON`, `OFF`, `DOWN`, or `RECONNECTING`. `status` without a
+target shows the compact target table used by the login hook. `status <target>`
+also probes every configured local TCP endpoint and prints its local and remote
+addresses. An endpoint that does not accept a connection is `DOWN`; when its
+target is stopped or reconnecting it is respectively `OFF` or `RECONNECTING`.
+A systemctl failure is `DOWN`, never `OFF`. Interactive SSH logins show only
+the target table; local interactive shells show nothing.
 
 SSH public-key authentication must work non-interactively before starting a
 target, for example:

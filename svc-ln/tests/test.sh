@@ -49,16 +49,16 @@ assert_contains "$(<"$MOCK_SYSTEMCTL_LOG")" '--user start svc-ln@super.service'
 $SOURCE_DIR/svc-ln restart super >/dev/null
 assert_contains "$(<"$MOCK_SYSTEMCTL_LOG")" '--user restart svc-ln@super.service'
 
-for state in 'active running ON' 'activating auto-restart RECONNECTING' 'inactive dead OFF' 'failed failed ERROR'; do
+for state in 'active running ON' 'activating auto-restart RECONNECTING' 'inactive dead OFF' 'failed failed DOWN'; do
     read -r MOCK_ACTIVE MOCK_SUB expected <<<"$state"
     export MOCK_ACTIVE MOCK_SUB
-    output=$($SOURCE_DIR/svc-ln status super) || [[ $expected == ERROR ]] || fail "status failed for $expected"
+    output=$($SOURCE_DIR/svc-ln status super)
     assert_contains "$output" "$expected"
 done
 
 export MOCK_SYSTEMCTL_FAIL=1
 assert_fails "$SOURCE_DIR/svc-ln" status super
-assert_contains "$(<"$TEST_ROOT/out")" ERROR
+assert_contains "$(<"$TEST_ROOT/out")" DOWN
 unset MOCK_SYSTEMCTL_FAIL
 
 mv "$TEST_ROOT/config/svc-ln/targets" "$TEST_ROOT/config/svc-ln/targets.saved"
@@ -90,6 +90,25 @@ UNEXPECTED=value
 EOF
 XDG_CONFIG_HOME="$TEST_ROOT/bad" assert_fails "$SOURCE_DIR/svc-ln" _run bad
 assert_contains "$(<"$TEST_ROOT/err")" 'unknown key UNEXPECTED'
+
+cat >"$TEST_ROOT/bad/svc-ln/targets/down.conf" <<'EOF'
+HOST=example.com
+USER=user
+SERVICES=down
+EOF
+cat >"$TEST_ROOT/bad/svc-ln/services/down.conf" <<'EOF'
+LOCAL_HOST=127.0.0.1
+LOCAL_PORT=1
+REMOTE_PORT=1001
+EOF
+export MOCK_ACTIVE=active MOCK_SUB=running
+output=$(XDG_CONFIG_HOME="$TEST_ROOT/bad" "$SOURCE_DIR/svc-ln" status down)
+assert_contains "$output" 'down'
+assert_contains "$output" '127.0.0.1:1'
+assert_contains "$output" 'DOWN'
+export MOCK_ACTIVE=inactive MOCK_SUB=dead
+output=$(XDG_CONFIG_HOME="$TEST_ROOT/bad" "$SOURCE_DIR/svc-ln" status down)
+assert_contains "$output" 'OFF'
 
 mkdir -p "$HOME/.local/bin"
 ln -s "$SOURCE_DIR/svc-ln" "$HOME/.local/bin/svc-ln"

@@ -111,7 +111,7 @@ unit_name() { printf 'svc-ln@%s.service' "$1"; }
 target_state() {
     local target=$1 properties line active= sub=
     if ! properties=$(systemctl --user show "$(unit_name "$target")" --property=ActiveState --property=SubState --no-pager 2>/dev/null); then
-        STATE=ERROR
+        STATE=DOWN
         return 1
     fi
     while IFS= read -r line; do
@@ -124,11 +124,37 @@ target_state() {
         active/running) STATE=ON ;;
         activating/*|*/auto-restart) STATE=RECONNECTING ;;
         inactive/dead) STATE=OFF ;;
-        *) STATE=ERROR ;;
+        *) STATE=DOWN ;;
     esac
 }
 
 print_status_header() { printf 'svc-ln\n'; printf '%-20s %s\n' TARGET STATE; }
+
+service_state() {
+    local target_state=$1 host=$2 port=$3
+    case $target_state in
+        ON)
+            if timeout 1 bash -c 'exec 3<>"/dev/tcp/$1/$2"' svc-ln-probe "$host" "$port" 2>/dev/null; then
+                SERVICE_STATE=ON
+            else
+                SERVICE_STATE=DOWN
+            fi ;;
+        OFF) SERVICE_STATE=OFF ;;
+        RECONNECTING) SERVICE_STATE=RECONNECTING ;;
+        *) SERVICE_STATE=DOWN ;;
+    esac
+}
+
+print_service_status() {
+    local target_state=$1 index local_endpoint remote_endpoint
+    printf '\n%-20s %-22s %-22s %s\n' SERVICE LOCAL REMOTE STATE
+    for index in "${!TARGET_SERVICE_NAMES[@]}"; do
+        local_endpoint="${TARGET_LOCAL_HOSTS[$index]}:${TARGET_LOCAL_PORTS[$index]}"
+        remote_endpoint="127.0.0.1:${TARGET_REMOTE_PORTS[$index]}"
+        service_state "$target_state" "${TARGET_LOCAL_HOSTS[$index]}" "${TARGET_LOCAL_PORTS[$index]}"
+        printf '%-20s %-22s %-22s %s\n' "${TARGET_SERVICE_NAMES[$index]}" "$local_endpoint" "$remote_endpoint" "$SERVICE_STATE"
+    done
+}
 
 status_one() {
     local target=$1 rc=0
@@ -136,6 +162,8 @@ status_one() {
     target_state "$target" || rc=1
     print_status_header
     printf '%-20s %s\n' "$target" "$STATE"
+    load_target "$target" || return 1
+    print_service_status "$STATE"
     return "$rc"
 }
 
