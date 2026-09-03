@@ -8,7 +8,7 @@ ContainerName=postgres
 Network=postgres.network
 
 Volume=postgres.volume:/var/lib/postgresql
-Volume=/opt/ml-infra/scripts/postgres:/opt/postgres:ro
+Volume=/opt/infra/scripts/postgres:/opt/postgres:ro
 
 Secret=postgres_admin_password
 
