@@ -1,5 +1,5 @@
 mod psql 'just/psql'
 
-# Install the MLflow reverse-tunnel CLI and user unit without enabling it.
-mlflow-tunnel-deploy:
-    ./mlflow-tunnel/deploy
+# Install svc-ln and its user unit without enabling it.
+svc-ln-deploy:
+    ./svc-ln/deploy
