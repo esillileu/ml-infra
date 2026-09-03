@@ -10,7 +10,7 @@ ContainerName=mlflow_f1
 
 Network=postgres.network
 
-Volume=/srv/mlflow/mlflow_f1:/mlartifacts
+Volume=/persist/srv/mlflow/mlflow_f1:/mlartifacts
 
 Secret=mlflow_f1_pgpass,target=/run/secrets/pgpass,mode=0600
 Environment=PGPASSFILE=/run/secrets/pgpass
