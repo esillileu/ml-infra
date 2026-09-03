@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+
+set -u
+
+readonly LOCAL_PORT=5001
+readonly REMOTE_PORT=15001
+readonly CONFIG_ROOT="${XDG_CONFIG_HOME:-$HOME/.config}/mlflow-tunnel"
+readonly TARGETS_DIR="$CONFIG_ROOT/targets"
+
+usage() { printf 'Usage: %s {on|off|status} [target]\n' "${0##*/}" >&2; }
+die() { printf 'mlflow-tunnel: %s\n' "$*" >&2; return 1; }
+valid_target() { [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; }
+valid_host() { [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; }
+valid_user() { [[ $1 =~ ^[A-Za-z_][A-Za-z0-9_-]*$ ]]; }
+valid_port() { [[ $1 =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )); }
+
+load_target() {
+    local target=$1 file line key value
+    local seen_host= seen_user= seen_port=
+    valid_target "$target" || { die "invalid target: $target"; return 1; }
+    file="$TARGETS_DIR/$target.conf"
+    [[ -f $file ]] || { die "unknown target: $target"; return 1; }
+    HOST= USER= SSH_PORT=22
+    while IFS= read -r line || [[ -n $line ]]; do
+        [[ -z $line || $line == \#* ]] && continue
+        [[ $line == *=* ]] || { die "invalid line in $file"; return 1; }
+        key=${line%%=*}; value=${line#*=}
+        [[ -n $value ]] || { die "empty value for $key in $file"; return 1; }
+        case $key in
+            HOST)
+                [[ -z $seen_host ]] || { die "duplicate key HOST in $file"; return 1; }
+                HOST=$value; seen_host=1 ;;
+            USER)
+                [[ -z $seen_user ]] || { die "duplicate key USER in $file"; return 1; }
+                USER=$value; seen_user=1 ;;
+            SSH_PORT)
+                [[ -z $seen_port ]] || { die "duplicate key SSH_PORT in $file"; return 1; }
+                SSH_PORT=$value; seen_port=1 ;;
+            *) die "unknown key $key in $file"; return 1 ;;
+        esac
+    done < "$file"
+    [[ -n $seen_host ]] || { die "missing HOST in $file"; return 1; }
+    [[ -n $seen_user ]] || { die "missing USER in $file"; return 1; }
+    valid_host "$HOST" || { die "invalid HOST in $file"; return 1; }
+    valid_user "$USER" || { die "invalid USER in $file"; return 1; }
+    valid_port "$SSH_PORT" || { die "invalid SSH_PORT in $file"; return 1; }
+}
+
+unit_name() { printf 'mlflow-tunnel@%s.service' "$1"; }
+
+target_status() {
+    local target=$1 state
+    load_target "$target" || return 1
+    state=$(systemctl --user show "$(unit_name "$target")" --property=ActiveState --value 2>/dev/null) || state=
+    if [[ $state == active ]]; then printf '%s: ON\n' "$target"; else printf '%s: OFF\n' "$target"; fi
+}
+
+active_targets() {
+    local unit target
+    while IFS= read -r unit; do
+        unit=${unit%%[[:space:]]*}
+        [[ $unit == mlflow-tunnel@*.service ]] || continue
+        target=${unit#mlflow-tunnel@}; target=${target%.service}
+        valid_target "$target" && printf '%s\n' "$target"
+    done < <(systemctl --user list-units --type=service --state=active --no-legend --plain 'mlflow-tunnel@*.service' 2>/dev/null) | LC_ALL=C sort -u
+}
+
+status_all() {
+    local active_only=$1 targets
+    targets=$(active_targets)
+    if [[ -z $targets ]]; then
+        [[ $active_only == 1 ]] || printf 'No active MLflow tunnels.\n'
+        return 0
+    fi
+    printf 'MLflow tunnels:\n'
+    while IFS= read -r target; do printf '  %s: ON\n' "$target"; done <<< "$targets"
+}
+
+main() {
+    local command=${1:-}
+    case $command in
+        on)
+            [[ $# == 2 ]] || { usage; return 2; }
+            load_target "$2" || return 1
+            if systemctl --user start "$(unit_name "$2")"; then
+                target_status "$2"
+            else
+                target_status "$2"; return 1
+            fi ;;
+        off)
+            [[ $# == 2 ]] || { usage; return 2; }
+            load_target "$2" || return 1
+            systemctl --user stop "$(unit_name "$2")" || return 1
+            printf '%s: OFF\n' "$2" ;;
+        status)
+            if [[ $# == 1 ]]; then status_all 0
+            elif [[ $# == 2 && $2 == --active-only ]]; then status_all 1
+            elif [[ $# == 2 ]]; then target_status "$2"
+            else usage; return 2; fi ;;
+        _run)
+            [[ $# == 2 ]] || { usage; return 2; }
+            load_target "$2" || return 1
+            exec ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes \
+                -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+                -p "$SSH_PORT" \
+                -R "127.0.0.1:${REMOTE_PORT}:127.0.0.1:${LOCAL_PORT}" \
+                "${USER}@${HOST}" ;;
+        *) usage; return 2 ;;
+    esac
+}
+
+main "$@"

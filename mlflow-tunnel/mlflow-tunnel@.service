@@ -1,0 +1,10 @@
+[Unit]
+Description=MLflow reverse SSH tunnel to %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/mlflow-tunnel _run %i
+Restart=on-failure
+RestartSec=5
